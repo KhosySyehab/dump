@@ -1,9 +1,9 @@
-# 🛡️ Laporan Proyek Keamanan Jaringan Berbasis ACL & Firewall
+# Laporan Proyek Keamanan Jaringan Berbasis ACL & Firewall
 ### Departemen Teknologi Informasi – Institut Teknologi Sepuluh Nopember (ITS)
 
 ---
 
-## 👥 Anggota Kelompok
+## Anggota Kelompok
 | Nama | NRP |
 |------|------|
 | Muhammad Ardiansyah Tri Wibowo | 50272410 |
@@ -13,7 +13,7 @@
 
 ---
 
-## 🧭 Latar Belakang
+## Latar Belakang
 
 Departemen Teknologi Informasi ITS (DTI ITS) baru saja melakukan restrukturisasi infrastruktur jaringan. Dalam sistem baru, terdapat lima subnet utama yang harus saling terhubung melalui core router laboratorium jaringan.  
 Namun, setelah terjadi insiden kebocoran data dan lonjakan traffic mencurigakan dari jaringan mahasiswa, tim keamanan internal ditugaskan untuk **merancang sistem pertahanan berlapis berbasis ACL dan firewall.**
@@ -22,14 +22,14 @@ Proyek ini bertujuan untuk membangun sistem jaringan yang **aman, modular, dan e
 
 ---
 
-## 🧩 Desain Topologi
+## Desain Topologi
 
-### 🗺️ Gambaran Umum
+### Gambaran Umum
 Topologi dibangun menggunakan **GNS3** dengan kombinasi **pfSense (firewall utama)**, beberapa router Linux/Debian sebagai router internal, dan beberapa node client (VPCS) serta server (Ubuntu Docker).
 
 ![Topologi GNS3](topologi.png)
 
-### 📦 Komponen Utama
+### Komponen Utama
 
 | Node / Perangkat | Nama Logis | Fungsi | Subnet |
 |------------------|-------------|---------|---------|
@@ -48,7 +48,7 @@ Topologi dibangun menggunakan **GNS3** dengan kombinasi **pfSense (firewall utam
 
 ---
 
-## ⚙️ Konfigurasi IP (Tabel Interface)
+## Konfigurasi IP (Tabel Interface)
 
 | Router / Node | Interface | IP Address | Deskripsi |
 |----------------|------------|-------------|-------------|
@@ -72,11 +72,11 @@ Topologi dibangun menggunakan **GNS3** dengan kombinasi **pfSense (firewall utam
 
 ---
 
-## 🧱 1. Definisi Keamanan yang Seimbang
+## 1. Definisi Keamanan yang Seimbang
 
 Kami mendefinisikan **keamanan seimbang** sebagai sistem yang menjaga **kerahasiaan, integritas, dan ketersediaan** tanpa menghalangi aktivitas kolaboratif antar subnet.
 
-### 🔒 Aturan Akses (Kebijakan ACL)
+### Aturan Akses (Kebijakan ACL)
 
 | Dari | Ke | Status | Alasan |
 |------|----|--------|--------|
@@ -89,12 +89,12 @@ Kami mendefinisikan **keamanan seimbang** sebagai sistem yang menjaga **kerahasi
 | Admin → Semua subnet | ✅ | Hak penuh untuk pemeliharaan |
 | Semua subnet → Internet | ✅ (via pfSense NAT) | Diatur oleh firewall NAT outbound |
 
-### 🧩 Filosofi Keamanan:
+### Filosofi Keamanan:
 > “Setiap subnet memiliki batasan komunikasi yang sesuai dengan fungsinya, namun tetap bisa berkolaborasi melalui jalur yang dikontrol pfSense.”
 
 ---
 
-## 🔰 2. Pertahanan Berlapis (Defense in Depth)
+## 2. Pertahanan Berlapis (Defense in Depth)
 
 ### Asumsi Serangan:
 - **ARP Spoofing / Sniffing** dari subnet mahasiswa  
@@ -113,13 +113,13 @@ Kami mendefinisikan **keamanan seimbang** sebagai sistem yang menjaga **kerahasi
 
 ---
 
-## 🧪 3. Pembuktian Sistem Berfungsi
+## 3. Pembuktian Sistem Berfungsi
 
 ### Indikator Keamanan:
-- 🔹 Tidak ada ping antar subnet yang diblokir (kecuali yang dilarang oleh ACL)
-- 🔹 Port FTP/DNS hanya bisa diakses dari subnet yang diizinkan
-- 🔹 Guest network tidak bisa mengakses internal server
-- 🔹 Semua node masih memiliki koneksi internet
+- Tidak ada ping antar subnet yang diblokir (kecuali yang dilarang oleh ACL)
+- Port FTP/DNS hanya bisa diakses dari subnet yang diizinkan
+- Guest network tidak bisa mengakses internal server
+- Semua node masih memiliki koneksi internet
 
 ### Pengujian:
 | Jenis Uji | Metode | Hasil |
@@ -137,7 +137,7 @@ Kami mendefinisikan **keamanan seimbang** sebagai sistem yang menjaga **kerahasi
 
 ---
 
-## ♻️ 4. Desain Adaptif & Modular
+## 4. Desain Adaptif & Modular
 
 Desain jaringan ini modular:
 - Setiap subnet memiliki router sendiri → mudah ditambah subnet baru.
@@ -148,11 +148,11 @@ Desain jaringan ini modular:
   3. Buat subnet baru (mis. 10.20.60.0/24)
   4. Tambah ACL & NAT rule di pfSense
 
-📘 *Dengan pendekatan ini, ekspansi jaringan tidak memerlukan perombakan total, hanya update pada layer kebijakan.*
+*Dengan pendekatan ini, ekspansi jaringan tidak memerlukan perombakan total, hanya update pada layer kebijakan.*
 
 ---
 
-## 🧾 Kesimpulan
+## Kesimpulan
 
 Melalui desain ini, kami berhasil membangun sistem:
 - Aman dan modular (berbasis pfSense + ACL)
@@ -165,7 +165,7 @@ Sistem ini membuktikan prinsip:
 
 ---
 
-## 📎 Lampiran
+## Lampiran
 - Konfigurasi pfSense (Firewall Rules & NAT)
 - Konfigurasi iptables router internal
 - Hasil ping dan traceroute antar subnet
