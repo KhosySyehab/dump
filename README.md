@@ -27,8 +27,7 @@ Proyek ini bertujuan untuk membangun sistem jaringan yang **aman, modular, dan e
 ### Gambaran Umum
 Topologi dibangun menggunakan **GNS3** dengan kombinasi **pfSense (firewall utama)**, beberapa router Linux/Debian sebagai router internal, dan beberapa node client (VPCS) serta server (Ubuntu Docker).
 
-<img width="1267" height="793" alt="image" src="https://github.com/user-attachments/assets/44991fdb-df46-40d3-b2ce-d6fc0f24ea74" />
-
+![Topologi GNS3](topologi.png)
 
 ### Komponen Utama
 
@@ -231,7 +230,10 @@ iptables -A FORWARD -j ACCEPT
 
 ```
 3. Konfigurasi Router Internal (Cisco IOS)
-A. Router Admin (R-Admin)
+A. Router Admin (Linux Router)
+```
+nano /etc/network/interfaces
+```
 ```
 auto lo
 iface lo inet loopback
@@ -257,6 +259,9 @@ echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 ```
 B. R-Mahasiswa (Linux Router)
 ```
+nano /etc/network/interfaces
+```
+```
 auto lo
 iface lo inet loopback
 
@@ -279,6 +284,9 @@ sysctl -w net.ipv4.ip_forward=1
 ```
 C. R-Akademik (Linux Router)
 ```
+nano /etc/network/interfaces
+```
+```
 auto lo
 iface lo inet loopback
 
@@ -299,7 +307,112 @@ Aktifkan Forwarding
 ```
 sysctl -w net.ipv4.ip_forward=1
 ```
-Catatan untuk R-Guest & R-Riset: Caranya sama persis, tinggal ganti IP Address eth0 (Link) dan eth1 (LAN) sesuai tabel IP Plan sebelumnya. Jangan lupa sysctl -w net.ipv4.ip_forward=1.
+D. R-Riset&IOT (Linux)
+```
+nano /etc/network/interfaces
+```
+```
+auto lo
+iface lo inet loopback
+
+# Interface ke Firewall Core (eth0)
+auto eth0
+iface eth0 inet static
+    address 10.20.0.14
+    netmask 255.255.255.252
+    gateway 10.20.0.13
+
+# Interface ke LAN Riset (eth1)
+auto eth1
+iface eth1 inet static
+    address 10.20.30.1
+    netmask 255.255.255.0
+```
+Script Forwarding
+```
+nano setup_riset.sh
+```
+```
+#!/bin/bash
+echo "Setting up Riset Router..."
+
+# 1. Aktifkan Router Mode (Wajib)
+sysctl -w net.ipv4.ip_forward=1
+
+# 2. Security: Standar (Open)
+# Riset biasanya butuh port terbuka buat testing, jadi default allow aja
+iptables -F
+iptables -A FORWARD -j ACCEPT
+
+echo "Riset Router Ready."
+```
+Jalankan Script
+```
+sh setup_riset.sh
+```
+E. Konfigurasi R-Guest (Linux)
+```
+nano /etc/network/interfaces
+```
+```
+auto lo
+iface lo inet loopback
+
+# Interface ke Firewall Core (eth0)
+auto eth0
+iface eth0 inet static
+    address 10.20.0.18
+    netmask 255.255.255.252
+    gateway 10.20.0.17
+
+# Interface ke LAN Guest (eth1) - Sesuai gambar ke Switch-Guest
+auto eth1
+iface eth1 inet static
+    address 10.20.50.1
+    netmask 255.255.255.0
+```
+Script Firewall & Forwarding (Guest Isolation)
+```
+nano setup_guest.sh
+```
+```
+#!/bin/bash
+echo "Setting up Guest Router..."
+
+# 1. Aktifkan Router Mode
+sysctl -w net.ipv4.ip_forward=1
+
+# 2. SECURITY: Guest Isolation Rule
+iptables -F
+# Blokir Guest (10.20.50.x) akses ke SEMUA Network Lab (10.20.0.0/16)
+iptables -A FORWARD -s 10.20.50.0/24 -d 10.20.0.0/16 -j DROP
+
+# Izinkan Guest ke Internet (Selain ip internal lab, boleh lewat)
+iptables -A FORWARD -s 10.20.50.0/24 -j ACCEPT
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+echo "Guest Router Secured."
+```
+### Konfigurasi PC Client
+1. PC-Guest (Linux/VPCS)
+```
+# Kalau VPCS:
+ip 10.20.50.10 10.20.50.1 24
+
+# Kalau Linux Docker Client:
+ip addr add 10.20.50.10/24 dev eth0
+ip route add default via 10.20.50.1
+```
+2. PC-Riset&IOT-1 (Linux/VPCS)
+```
+# Kalau VPCS:
+ip 10.20.30.10 10.20.30.1 24
+
+# Kalau Linux Docker Client:
+ip addr add 10.20.30.10/24 dev eth0
+ip route add default via 10.20.30.1
+```
+Cara Test Guest Isolation: Coba ping dari PC-Guest ke PC-Riset (ping 10.20.30.10). Harusnya Request Timed Out (Karena diblokir di router Guest). Tapi kalau ping 8.8.8.8 harusnya Reply.
 4. Konfigurasi Edge Router (Versi Linux GNS3)
 Edit Network Configuration: nano /etc/network/interfaces
 ```
