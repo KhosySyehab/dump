@@ -1,19 +1,12 @@
-enable
-conf t
-hostname EdgeRouter
+auto lo
+iface lo inet loopback
 
-! Interface ke Internet (Cloud NAT)
-interface e0/0
- ip address dhcp
- no shut
+# Ke Internet (Awan)
+auto eth0
+iface eth0 inet dhcp
 
-! Interface ke Core (UbuntuDocker-9)
-interface e0/1
- ip address 192.168.1.1 255.255.255.0
- no shut
-
-! Routing: Lempar trafik kampus ke Core
-ip route 10.20.0.0 255.255.0.0 192.168.1.2
-ip route 172.16.0.0 255.240.0.0 192.168.1.2
-end
-wr
+# Ke Core Router
+auto eth1
+iface eth1 inet static
+    address 192.168.100.1
+    netmask 255.255.255.252
