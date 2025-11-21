@@ -152,6 +152,127 @@ Desain jaringan ini modular:
 
 ---
 
+## 5. Konfigurasi Router Internal (Linux/Debian)
+Di GNS3, pastikan kabel dicolokkan sesuai urutan interface eth di Docker container:
+```
+Interface Docker,Terhubung Ke,IP Address (CIDR),Keterangan
+eth0,Edge Router (Internet),192.168.100.2/30,Uplink WAN
+eth1,R-Mahasiswa,10.20.0.1/30,Gateway untuk Mahasiswa
+eth2,R-Admin,10.20.0.13/30,Gateway untuk Admin
+eth3,R-Guest,10.20.0.17/30,Gateway untuk Guest
+```
+### Konfigurasi IP Address (Persisten)
+- Klik kanan Node Docker > Edit config > Edit /etc/network/interfaces. Atau edit manual dari terminal: nano /etc/network/interfaces.
+
+```
+# /etc/network/interfaces
+
+auto lo
+iface lo inet loopback
+
+# 1. WAN (Ke Edge Router/Internet)
+auto eth0
+iface eth0 inet static
+    address 192.168.100.2
+    netmask 255.255.255.252
+    gateway 192.168.100.1
+
+# 2. Link ke Mahasiswa
+auto eth1
+iface eth1 inet static
+    address 10.20.0.1
+    netmask 255.255.255.252
+
+# 3. Link ke Admin
+auto eth2
+iface eth2 inet static
+    address 10.20.0.13
+    netmask 255.255.255.252
+
+# 4. Link ke Guest
+auto eth3
+iface eth3 inet static
+    address 10.20.0.17
+    netmask 255.255.255.252
+```
+### Script Setup (Routing & Firewall)
+
+file: setup_firewall.sh
+
+```
+#!/bin/bash
+
+echo "[*] Memulai Konfigurasi Core Firewall..."
+
+# --- A. SYSTEM TUNING ---
+# Mengaktifkan IP Forwarding (Wajib agar bisa merouting paket)
+sysctl -w net.ipv4.ip_forward=1
+
+# --- B. STATIC ROUTING ---
+# Menambahkan rute ke subnet di belakang Router Internal
+# Syntax: ip route add [SUBNET_TUJUAN] via [IP_ROUTER_NEXT_HOP]
+
+echo "[+] Menambahkan Static Routes..."
+# Ke Network Mahasiswa (Lewat R-Mhs: 10.20.0.2)
+ip route add 10.20.10.0/24 via 10.20.0.2
+
+# Ke Network Admin (Lewat R-Admin: 10.20.0.14)
+ip route add 10.20.40.0/24 via 10.20.0.14
+
+# Ke Network Guest (Lewat R-Guest: 10.20.0.18)
+ip route add 10.20.50.0/24 via 10.20.0.18
+
+# (Tambahkan untuk Akademik/Riset jika ada, sesuaikan IP Next Hop-nya)
+
+
+# --- C. FIREWALL & NAT (IPTABLES) ---
+echo "[+] Mengonfigurasi IPTables..."
+
+# 1. Flush (Bersihkan) rule lama
+iptables -F
+iptables -t nat -F
+
+# 2. NAT Masquerade (Agar semua subnet bisa Internetan)
+# Traffic yang keluar lewat eth0 (WAN) akan di-NAT
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+# 3. SECURITY POLICIES (ACL)
+
+# Policy: Izinkan paket yang sudah establish (Reply packet)
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# [BLOCK] Mahasiswa ke Admin (Cegah akses data sensitif)
+iptables -A FORWARD -s 10.20.10.0/24 -d 10.20.40.0/24 -j DROP
+
+# [BLOCK] Guest Isolation (Guest tidak boleh ke Network Internal manapun 10.20.x.x)
+iptables -A FORWARD -s 10.20.50.0/24 -d 10.20.0.0/16 -j DROP
+
+# [ALLOW] Sisanya diizinkan (Default Allow untuk Internet & routing wajar)
+iptables -A FORWARD -j ACCEPT
+
+echo "[*] Konfigurasi Selesai! Sistem Siap."
+```
+
+### Verifikasi Keberhasilan
+
+Di PC Client.
+
+1. Cek Internet:
+   - Dari PC Mahasiswa: ping 8.8.8.8
+   - Harus Reply (Tanda Routing Default & NAT jalan).
+2. Cek Routing Internal:
+   - Dari PC Admin: ping 10.20.10.10 (IP PC Mahasiswa)
+   - Harus Reply (Tanda Static Route jalan).
+3. Cek Keamanan (Firewall):
+   - Dari PC Mahasiswa: ping 10.20.40.10 (IP PC Admin)
+   - Harus RTO / Destination Net Unreachable (Tanda IPTables rule DROP jalan).
+
+*Pastikan Edge Router (Cisco/Linux di atasnya Docker ini) memiliki rute balik agar paket internet bisa kembali ke lab.
+
+Di Edge Router:
+```
+ip route 10.20.0.0 255.255.0.0 192.168.100.2
+```
 ## Kesimpulan
 
 Melalui desain ini, kami berhasil membangun sistem:
