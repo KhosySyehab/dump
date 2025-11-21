@@ -27,7 +27,8 @@ Proyek ini bertujuan untuk membangun sistem jaringan yang **aman, modular, dan e
 ### Gambaran Umum
 Topologi dibangun menggunakan **GNS3** dengan kombinasi **pfSense (firewall utama)**, beberapa router Linux/Debian sebagai router internal, dan beberapa node client (VPCS) serta server (Ubuntu Docker).
 
-![Topologi GNS3](topologi.png)
+<img width="1298" height="718" alt="image" src="https://github.com/user-attachments/assets/ca0e9585-dcf1-4b65-8711-ca2689fe63cf" />
+
 
 ### Komponen Utama
 
