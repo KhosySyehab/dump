@@ -153,125 +153,283 @@ Desain jaringan ini modular:
 ---
 
 ## 5. Konfigurasi Router Internal (Linux/Debian)
-Di GNS3, pastikan kabel dicolokkan sesuai urutan interface eth di Docker container:
+1. Mapping Port & IP Address (IP Plan)
 ```
-Interface Docker,Terhubung Ke,IP Address (CIDR),Keterangan
-eth0,Edge Router (Internet),192.168.100.2/30,Uplink WAN
-eth1,R-Mahasiswa,10.20.0.1/30,Gateway untuk Mahasiswa
-eth2,R-Admin,10.20.0.13/30,Gateway untuk Admin
-eth3,R-Guest,10.20.0.17/30,Gateway untuk Guest
+Interface Firewall,Terhubung Ke (Router),IP Firewall (Gateway),IP Router Tetangga,Subnet Link
+eth0,EdgeRouter (Internet),192.168.100.2,192.168.100.1,/30
+eth1,R-Admin,10.20.0.1,10.20.0.2,/30
+eth2,R-Mahasiswa,10.20.0.5,10.20.0.6,/30
+eth3,R-Akademik,10.20.0.9,10.20.0.10,/30
+eth4,R-Riset & IoT,10.20.0.13,10.20.0.14,/30
+eth5,R-Guest,10.20.0.17,10.20.0.18,/30
 ```
-### Konfigurasi IP Address (Persisten)
-- Klik kanan Node Docker > Edit config > Edit /etc/network/interfaces. Atau edit manual dari terminal: nano /etc/network/interfaces.
+2. Konfigurasi CORE FIREWALL (Linux Docker)
+
+Di Console Docker Firewall :
+```
+nano setup.sh
+```
+Isi dengan script ini
+```
+#!/bin/bash
+echo ">>> MEMULAI KONFIGURASI DTI FIREWALL SYSTEM..."
+
+# 1. Aktifkan IP Forwarding (Supaya bisa jadi Router)
+sysctl -w net.ipv4.ip_forward=1
+
+# 2. Setting IP Address Interface (Sesuai Topologi Baru)
+# Hapus IP lama biar bersih
+ip addr flush dev eth0
+ip addr flush dev eth1
+ip addr flush dev eth2
+ip addr flush dev eth3
+ip addr flush dev eth4
+ip addr flush dev eth5
+
+# Pasang IP Baru
+ip addr add 192.168.100.2/30 dev eth0  # WAN
+ip addr add 10.20.0.1/30 dev eth1      # Link ke Admin
+ip addr add 10.20.0.5/30 dev eth2      # Link ke Mahasiswa
+ip addr add 10.20.0.9/30 dev eth3      # Link ke Akademik
+ip addr add 10.20.0.13/30 dev eth4     # Link ke Riset
+ip addr add 10.20.0.17/30 dev eth5     # Link ke Guest
+
+# Nyalakan interface
+ip link set eth0 up && ip link set eth1 up && ip link set eth2 up
+ip link set eth3 up && ip link set eth4 up && ip link set eth5 up
+
+# 3. Setting Routing (Supaya Firewall tau lokasi subnet LAN)
+# Syntax: ip route add [Subnet Tujuan] via [IP Router Tetangga]
+ip route add default via 192.168.100.1            # Default Route ke Internet
+ip route add 10.20.40.0/24 via 10.20.0.2          # Ke LAN Admin
+ip route add 10.20.10.0/24 via 10.20.0.6          # Ke LAN Mahasiswa
+ip route add 10.20.20.0/24 via 10.20.0.10         # Ke LAN Akademik
+ip route add 10.20.30.0/24 via 10.20.0.14         # Ke LAN Riset
+ip route add 10.20.50.0/24 via 10.20.0.18         # Ke LAN Guest
+
+# 4. Konfigurasi NAT (Supaya Client bisa Internetan)
+iptables -t nat -F
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+# 5. Konfigurasi KEAMANAN (ACL / Firewall Rules)
+iptables -F
+# Allow traffic related/established (Balasan paket)
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# [BLOCK] Mahasiswa ke Admin & Keuangan
+iptables -A FORWARD -s 10.20.10.0/24 -d 10.20.40.0/24 -j DROP
+
+# [BLOCK] Guest Isolation (Cuma boleh Internet, gak boleh ke Internal manapun)
+iptables -A FORWARD -s 10.20.50.0/24 -d 10.20.0.0/16 -j DROP
+
+# [ALLOW] Riset ke Akademik (Kolaborasi)
+iptables -A FORWARD -s 10.20.30.0/24 -d 10.20.20.0/24 -j ACCEPT
+
+# [ALLOW] Sisanya (Default Accept untuk Routing Internet)
+iptables -A FORWARD -j ACCEPT
 
 ```
-# /etc/network/interfaces
-
+3. Konfigurasi Router Internal (Cisco IOS)
+A. Router Admin (Linux Router)
+```
+nano /etc/network/interfaces
+```
+```
 auto lo
 iface lo inet loopback
 
-# 1. WAN (Ke Edge Router/Internet)
+# Interface ke Firewall (eth0)
 auto eth0
 iface eth0 inet static
-    address 192.168.100.2
+    address 10.20.0.2
     netmask 255.255.255.252
-    gateway 192.168.100.1
+    gateway 10.20.0.1  <-- Gateway menunjuk ke IP Firewall
 
-# 2. Link ke Mahasiswa
+# Interface ke LAN Admin (eth1)
 auto eth1
 iface eth1 inet static
-    address 10.20.0.1
-    netmask 255.255.255.252
-
-# 3. Link ke Admin
-auto eth2
-iface eth2 inet static
-    address 10.20.0.13
-    netmask 255.255.255.252
-
-# 4. Link ke Guest
-auto eth3
-iface eth3 inet static
-    address 10.20.0.17
-    netmask 255.255.255.252
+    address 10.20.40.1
+    netmask 255.255.255.0
 ```
-### Script Setup (Routing & Firewall)
+Aktifkan Forwarding
+```
+sysctl -w net.ipv4.ip_forward=1
+# Supaya permanen:
+echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+```
+B. R-Mahasiswa (Linux Router)
+```
+nano /etc/network/interfaces
+```
+```
+auto lo
+iface lo inet loopback
 
-file: setup_firewall.sh
+# Interface ke Firewall (eth0)
+auto eth0
+iface eth0 inet static
+    address 10.20.0.6
+    netmask 255.255.255.252
+    gateway 10.20.0.5
 
+# Interface ke LAN Mahasiswa (eth1)
+auto eth1
+iface eth1 inet static
+    address 10.20.10.1
+    netmask 255.255.255.0
+```
+Aktifkan Forwarding
+```
+sysctl -w net.ipv4.ip_forward=1
+```
+C. R-Akademik (Linux Router)
+```
+nano /etc/network/interfaces
+```
+```
+auto lo
+iface lo inet loopback
+
+# Interface ke Firewall (eth0)
+auto eth0
+iface eth0 inet static
+    address 10.20.0.10
+    netmask 255.255.255.252
+    gateway 10.20.0.9
+
+# Interface ke LAN Akademik (eth1)
+auto eth1
+iface eth1 inet static
+    address 10.20.20.1
+    netmask 255.255.255.0
+```
+Aktifkan Forwarding
+```
+sysctl -w net.ipv4.ip_forward=1
+```
+D. R-Riset&IOT (Linux)
+```
+nano /etc/network/interfaces
+```
+```
+auto lo
+iface lo inet loopback
+
+# Interface ke Firewall Core (eth0)
+auto eth0
+iface eth0 inet static
+    address 10.20.0.14
+    netmask 255.255.255.252
+    gateway 10.20.0.13
+
+# Interface ke LAN Riset (eth1)
+auto eth1
+iface eth1 inet static
+    address 10.20.30.1
+    netmask 255.255.255.0
+```
+Script Forwarding
+```
+nano setup_riset.sh
+```
 ```
 #!/bin/bash
+echo "Setting up Riset Router..."
 
-echo "[*] Memulai Konfigurasi Core Firewall..."
-
-# --- A. SYSTEM TUNING ---
-# Mengaktifkan IP Forwarding (Wajib agar bisa merouting paket)
+# 1. Aktifkan Router Mode (Wajib)
 sysctl -w net.ipv4.ip_forward=1
 
-# --- B. STATIC ROUTING ---
-# Menambahkan rute ke subnet di belakang Router Internal
-# Syntax: ip route add [SUBNET_TUJUAN] via [IP_ROUTER_NEXT_HOP]
-
-echo "[+] Menambahkan Static Routes..."
-# Ke Network Mahasiswa (Lewat R-Mhs: 10.20.0.2)
-ip route add 10.20.10.0/24 via 10.20.0.2
-
-# Ke Network Admin (Lewat R-Admin: 10.20.0.14)
-ip route add 10.20.40.0/24 via 10.20.0.14
-
-# Ke Network Guest (Lewat R-Guest: 10.20.0.18)
-ip route add 10.20.50.0/24 via 10.20.0.18
-
-# (Tambahkan untuk Akademik/Riset jika ada, sesuaikan IP Next Hop-nya)
-
-
-# --- C. FIREWALL & NAT (IPTABLES) ---
-echo "[+] Mengonfigurasi IPTables..."
-
-# 1. Flush (Bersihkan) rule lama
+# 2. Security: Standar (Open)
+# Riset biasanya butuh port terbuka buat testing, jadi default allow aja
 iptables -F
-iptables -t nat -F
-
-# 2. NAT Masquerade (Agar semua subnet bisa Internetan)
-# Traffic yang keluar lewat eth0 (WAN) akan di-NAT
-iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-
-# 3. SECURITY POLICIES (ACL)
-
-# Policy: Izinkan paket yang sudah establish (Reply packet)
-iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-# [BLOCK] Mahasiswa ke Admin (Cegah akses data sensitif)
-iptables -A FORWARD -s 10.20.10.0/24 -d 10.20.40.0/24 -j DROP
-
-# [BLOCK] Guest Isolation (Guest tidak boleh ke Network Internal manapun 10.20.x.x)
-iptables -A FORWARD -s 10.20.50.0/24 -d 10.20.0.0/16 -j DROP
-
-# [ALLOW] Sisanya diizinkan (Default Allow untuk Internet & routing wajar)
 iptables -A FORWARD -j ACCEPT
 
-echo "[*] Konfigurasi Selesai! Sistem Siap."
+echo "Riset Router Ready."
 ```
-
-### Verifikasi Keberhasilan
-
-Di PC Client.
-
-1. Cek Internet:
-   - Dari PC Mahasiswa: ping 8.8.8.8
-   - Harus Reply (Tanda Routing Default & NAT jalan).
-2. Cek Routing Internal:
-   - Dari PC Admin: ping 10.20.10.10 (IP PC Mahasiswa)
-   - Harus Reply (Tanda Static Route jalan).
-3. Cek Keamanan (Firewall):
-   - Dari PC Mahasiswa: ping 10.20.40.10 (IP PC Admin)
-   - Harus RTO / Destination Net Unreachable (Tanda IPTables rule DROP jalan).
-
-*Pastikan Edge Router (Cisco/Linux di atasnya Docker ini) memiliki rute balik agar paket internet bisa kembali ke lab.
-
-Di Edge Router:
+Jalankan Script
 ```
-ip route 10.20.0.0 255.255.0.0 192.168.100.2
+sh setup_riset.sh
+```
+E. Konfigurasi R-Guest (Linux)
+```
+nano /etc/network/interfaces
+```
+```
+auto lo
+iface lo inet loopback
+
+# Interface ke Firewall Core (eth0)
+auto eth0
+iface eth0 inet static
+    address 10.20.0.18
+    netmask 255.255.255.252
+    gateway 10.20.0.17
+
+# Interface ke LAN Guest (eth1) - Sesuai gambar ke Switch-Guest
+auto eth1
+iface eth1 inet static
+    address 10.20.50.1
+    netmask 255.255.255.0
+```
+Script Firewall & Forwarding (Guest Isolation)
+```
+nano setup_guest.sh
+```
+```
+#!/bin/bash
+echo "Setting up Guest Router..."
+
+# 1. Aktifkan Router Mode
+sysctl -w net.ipv4.ip_forward=1
+
+# 2. SECURITY: Guest Isolation Rule
+iptables -F
+# Blokir Guest (10.20.50.x) akses ke SEMUA Network Lab (10.20.0.0/16)
+iptables -A FORWARD -s 10.20.50.0/24 -d 10.20.0.0/16 -j DROP
+
+# Izinkan Guest ke Internet (Selain ip internal lab, boleh lewat)
+iptables -A FORWARD -s 10.20.50.0/24 -j ACCEPT
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+echo "Guest Router Secured."
+```
+### Konfigurasi PC Client
+1. PC-Guest (Linux/VPCS)
+```
+# Kalau VPCS:
+ip 10.20.50.10 10.20.50.1 24
+
+# Kalau Linux Docker Client:
+ip addr add 10.20.50.10/24 dev eth0
+ip route add default via 10.20.50.1
+```
+2. PC-Riset&IOT-1 (Linux/VPCS)
+```
+# Kalau VPCS:
+ip 10.20.30.10 10.20.30.1 24
+
+# Kalau Linux Docker Client:
+ip addr add 10.20.30.10/24 dev eth0
+ip route add default via 10.20.30.1
+```
+Cara Test Guest Isolation: Coba ping dari PC-Guest ke PC-Riset (ping 10.20.30.10). Harusnya Request Timed Out (Karena diblokir di router Guest). Tapi kalau ping 8.8.8.8 harusnya Reply.
+4. Konfigurasi Edge Router (Versi Linux GNS3)
+Edit Network Configuration: nano /etc/network/interfaces
+```
+auto lo
+iface lo inet loopback
+
+# Interface ke Internet (eth0) - Pakai DHCP dari GNS3 NAT
+auto eth0
+iface eth0 inet dhcp
+
+# Interface ke Firewall Docker (eth1)
+auto eth1
+iface eth1 inet static
+    address 192.168.100.1
+    netmask 255.255.255.252
+```
+Jalankan Script: sh setup_edge.sh
 ```
 ## Kesimpulan
 
